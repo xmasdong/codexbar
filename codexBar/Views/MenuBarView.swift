@@ -15,7 +15,7 @@ struct MenuBarView: View {
     private let countdownTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
     // 菜单打开时 10 秒快速刷新活跃账号；菜单关闭时 5 分钟后台刷新全部
     private let quickTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
-    private let slowTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
+    private let slowTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     @State private var menuVisible = false
     @State private var languageToggle = false  // 用于触发语言切换后的重绘
 
@@ -251,10 +251,14 @@ struct MenuBarView: View {
             guard !menuVisible else { return }
             Task {
                 await refresh()
+                store.markActiveAccount()
                 autoSwitchIfNeeded()
             }
         }
-        .onAppear { menuVisible = true }
+        .onAppear {
+            menuVisible = true
+            store.markActiveAccount()
+        }
         .onDisappear { menuVisible = false }
     }
 
@@ -293,7 +297,11 @@ struct MenuBarView: View {
             return rem0 > rem1
         }
 
-        guard let best = candidates.first else { return }
+        guard let best = candidates.first else {
+            // 无可用账号，发通知提醒用户
+            sendNotification(title: L.autoSwitchTitle, body: L.autoSwitchNoCandidates)
+            return
+        }
 
         do {
             try store.activate(best)
@@ -304,18 +312,22 @@ struct MenuBarView: View {
     }
 
     private func sendAutoSwitchNotification(from old: TokenAccount, to new: TokenAccount) {
+        sendNotification(
+            title: L.autoSwitchTitle,
+            body: L.autoSwitchBody(old.organizationName ?? old.email, new.organizationName ?? new.email)
+        )
+    }
+
+    private func sendNotification(title: String, body: String) {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
             let content = UNMutableNotificationContent()
-            content.title = L.autoSwitchTitle
-            content.body = L.autoSwitchBody(
-                old.organizationName ?? old.email,
-                new.organizationName ?? new.email
-            )
+            content.title = title
+            content.body = body
             content.sound = .default
             let request = UNNotificationRequest(
-                identifier: "auto-switch-\(Date().timeIntervalSince1970)",
+                identifier: "codexbar-\(Date().timeIntervalSince1970)",
                 content: content,
                 trigger: nil
             )

@@ -80,6 +80,11 @@ enum L {
             ? "「\(from)」额度不足，已自动切换至「\(to)」"
             : "Quota low on \"\(from)\", switched to \"\(to)\""
     }
+    static var autoSwitchNoCandidates: String {
+        zh
+            ? "所有账号额度不足或不可用，请手动处理"
+            : "All accounts are low or unavailable, please take action"
+    }
 
     // MARK: - AccountRowView
     static var reauth: String          { zh ? "重新授权"     : "Re-authorize" }

@@ -97,7 +97,7 @@ class TokenStore: ObservableObject {
 
     // MARK: - Private
 
-    private func markActiveAccount() {
+    func markActiveAccount() {
         guard let data = try? Data(contentsOf: authURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tokens = json["tokens"] as? [String: Any],

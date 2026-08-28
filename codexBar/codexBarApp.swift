@@ -50,13 +50,12 @@ struct MenuBarIconView: View {
     }
 
     private var iconName: String {
-        // 优先以活跃账号状态决定图标；无活跃账号才看全部
-        let ref: [TokenAccount]
-        if let active = store.accounts.first(where: { $0.isActive }) {
-            ref = [active]
-        } else {
-            ref = store.accounts
+        // 有活跃账号：只看它的状态。无活跃账号：显中性图标，
+        // 不拿全部账号的最差状态误报（否则池里任一号额度满就显三角，误导）。
+        guard let active = store.accounts.first(where: { $0.isActive }) else {
+            return "terminal.fill"
         }
+        let ref = [active]
         if ref.contains(where: { $0.isBanned }) {
             return "xmark.circle.fill"
         }

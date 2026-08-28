@@ -390,25 +390,33 @@ struct MenuBarView: View {
     }
 
     private func importAccounts() {
+        // 菜单栏 app（LSUIElement）默认不是前台，NSOpenPanel 拿不到焦点会卡、难选中。
+        // 先把 app 激活到前台，再用异步 begin 弹面板（不阻塞主线程）。
+        NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = L.importAccount
-        guard panel.runModal() == .OK, let url = panel.url,
-              let data = try? Data(contentsOf: url) else { return }
-        do {
-            let accounts = try AccountImporter.parse(data)
-            for acc in accounts { store.addOrUpdate(acc) }
-            showSuccess = L.importedCount(accounts.count)
-            let imported = accounts
-            Task {
-                for acc in imported {
-                    await WhamService.shared.refreshOne(account: acc, store: store)
+        panel.level = .modalPanel
+        panel.begin { resp in
+            guard resp == .OK, let url = panel.url,
+                  let data = try? Data(contentsOf: url) else { return }
+            DispatchQueue.main.async {
+                do {
+                    let accounts = try AccountImporter.parse(data)
+                    for acc in accounts { store.addOrUpdate(acc) }
+                    showSuccess = L.importedCount(accounts.count)
+                    let imported = accounts
+                    Task {
+                        for acc in imported {
+                            await WhamService.shared.refreshOne(account: acc, store: store)
+                        }
+                    }
+                } catch {
+                    showError = error.localizedDescription
                 }
             }
-        } catch {
-            showError = error.localizedDescription
         }
     }
 

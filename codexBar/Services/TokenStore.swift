@@ -111,15 +111,22 @@ class TokenStore: ObservableObject {
         guard let data = try? Data(contentsOf: authURL),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tokens = json["tokens"] as? [String: Any] else { return }
-        // 用 access_token 精确匹配激活账号：team workspace 多成员共享 chatgpt_account_id，
-        // 仅靠 account_id 无法区分是哪个成员，access_token 才能定位到具体成员。
-        let activeAccess = tokens["access_token"] as? String
-        let activeAcctId = tokens["account_id"] as? String
+
+        // 定位激活账号到具体成员，且要扛得住 Codex 轮换 access_token：
+        // 从 auth.json 的 access_token 解出 chatgpt_account_user_id（成员级唯一、不随 token 变），
+        // 匹配 pool 的 accountId。退化时再用 access_token 字符串 / chatgpt_account_id。
+        let activeAccess = tokens["access_token"] as? String ?? ""
+        let activeAcctId = tokens["account_id"] as? String ?? ""
+        let claims = AccountBuilder.decodeJWT(activeAccess)
+        let authClaims = claims["https://api.openai.com/auth"] as? [String: Any] ?? [:]
+        let activeUserAcct = authClaims["chatgpt_account_user_id"] as? String ?? ""
 
         for idx in accounts.indices {
-            if let activeAccess, !activeAccess.isEmpty {
+            if !activeUserAcct.isEmpty {
+                accounts[idx].isActive = (accounts[idx].accountId == activeUserAcct)
+            } else if !activeAccess.isEmpty {
                 accounts[idx].isActive = (accounts[idx].accessToken == activeAccess)
-            } else if let activeAcctId {
+            } else if !activeAcctId.isEmpty {
                 accounts[idx].isActive = (accounts[idx].chatgptAccountId == activeAcctId)
             }
         }

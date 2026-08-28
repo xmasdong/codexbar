@@ -27,10 +27,20 @@ struct AccountImporter {
             throw ImportError.invalidJSON
         }
 
-        // 支持两种顶层：{accounts:[...]} 或直接 [...]
+        // 支持的顶层结构：
+        //  1) {accounts:[...]}     —— sub2api 导出
+        //  2) [...]                —— 裸数组
+        //  3) {access_token:...}   —— 顶层单账号（扁平 auth.json 风格，字段直接平铺）
+        //  4) {credentials:{...}}  —— 顶层单账号带 credentials
         let rawAccounts: [[String: Any]]
-        if let dict = root as? [String: Any], let arr = dict["accounts"] as? [[String: Any]] {
-            rawAccounts = arr
+        if let dict = root as? [String: Any] {
+            if let arr = dict["accounts"] as? [[String: Any]] {
+                rawAccounts = arr
+            } else if dict["access_token"] != nil || dict["credentials"] != nil {
+                rawAccounts = [dict]
+            } else {
+                throw ImportError.invalidJSON
+            }
         } else if let arr = root as? [[String: Any]] {
             rawAccounts = arr
         } else {
@@ -50,14 +60,15 @@ struct AccountImporter {
                 accessToken: access, refreshToken: refresh, idToken: idToken
             ))
 
-            // chatgptAccountId 兜底（API/auth.json 用）
-            if account.chatgptAccountId.isEmpty, let cid = cred["chatgpt_account_id"] as? String, !cid.isEmpty {
-                account.chatgptAccountId = cid
+            // chatgptAccountId 兜底（API/auth.json 用）。两种字段名：chatgpt_account_id 或 account_id
+            let credChatgptId = (cred["chatgpt_account_id"] as? String) ?? (cred["account_id"] as? String) ?? ""
+            if account.chatgptAccountId.isEmpty, !credChatgptId.isEmpty {
+                account.chatgptAccountId = credChatgptId
             }
             // accountId（去重键）兜底：token 解析不出来时
             if account.accountId.isEmpty {
-                if let cid = cred["chatgpt_account_id"] as? String, !cid.isEmpty {
-                    account.accountId = cid
+                if !credChatgptId.isEmpty {
+                    account.accountId = credChatgptId
                 } else if let em = cred["email"] as? String, !em.isEmpty {
                     account.accountId = "email:\(em)"
                 }
